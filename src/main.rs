@@ -1,8 +1,9 @@
 use std::io::{self, Error};
 
 use actix_cors::Cors;
+use actix_files::NamedFile;
 use actix_multipart::form::{MultipartForm, MultipartFormConfig, tempfile::TempFile};
-use actix_web::{App, HttpResponse, HttpServer, Responder, get, http::{StatusCode, header::ContentType}, web};
+use actix_web::{App, HttpResponse, HttpServer, Responder, dev::Path, get, http::{StatusCode, header::ContentType}, web};
 use rusqlite::Connection;
 use uuid::Uuid;
 use serde::Serialize;
@@ -54,6 +55,11 @@ async fn  main() -> io::Result<()>{
             web::resource("/get")
             .route(web::get().to(get))
         )
+        .service(
+            web::resource("/item/{item_id}")
+            .route(web::get().to(get_item))
+        )
+
     })
     .bind(("0.0.0.0",8080))?
     .workers(2)
@@ -65,6 +71,12 @@ async fn  main() -> io::Result<()>{
 async fn ping() -> io::Result<impl Responder>{
     Ok(HttpResponse::build(StatusCode::OK).content_type(ContentType::plaintext()).body("hello world!"))
 }
+
+async fn get_item(item_id:web::Path<String>)-> io::Result<impl Responder>{
+    println!("item_id is {}",item_id);
+    Ok(NamedFile::open(format!("{}/{}",DESTINATION,item_id)))
+}
+
 
 #[derive(Debug,MultipartForm)]
 struct UploadForm{
