@@ -1,5 +1,7 @@
 use crate::utility;
+use deadpool_postgres::Pool;
 use std::io::{Error, ErrorKind, Result};
+
 const POSTGRES_SQL: &str = "
 CREATE TABLE IF NOT EXISTS \"user\" (
     user_id UUID PRIMARY KEY NOT NULL,
@@ -56,46 +58,48 @@ CREATE INDEX IF NOT EXISTS idx_user_is_active ON \"user\"(is_active) WHERE is_ac
 CREATE INDEX IF NOT EXISTS idx_session_user_id ON \"session\"(user_id);
 CREATE INDEX IF NOT EXISTS idx_session_is_revoked ON \"session\"(is_revoked) WHERE is_revoked = false;
 CREATE INDEX IF NOT EXISTS idx_dev_token_user_id ON \"dev_token\"(user_id);
-CREATE INDEX IF NOT EXISTS idx_dev_token_is_active ON \"dev_token\"(is_active) WHERE is_active = true;
+CREATE INDEX IF NOT EXISTS idx_dev_token_is_active ON \"dev_token\"(is_revoked) WHERE is_revoked = false;
 CREATE INDEX IF NOT EXISTS idx_post_user_id ON \"post\"(user_id);
 CREATE INDEX IF NOT EXISTS idx_post_created_at ON \"post\"(created_at DESC);
 ";
-pub async fn database() -> Result<()> {
-    //mongodb initialization
-    println!("===mongodb initialization===");
-    let mongo_clinet = match utility::connect_to_mongo().await {
-        Ok(clinet) => clinet,
+
+/// Initialize database tables and collections
+pub async fn database(pool: &Pool) -> Result<()> {
+    //mongo initialization
+    print!("===mongo initialization===");
+    let mongo_client = match utility::connect_to_mongo().await {
+        Ok(client) => client,
         Err(e) => {
-            return Err(Error::new(ErrorKind::Other, e.to_string()));
+            eprintln!("MongoDB connection failed: {}", e);
+            return Err(e);
         }
     };
-    let db = mongo_clinet.database("image");
+    let db = mongo_client.database("image");
     let mongo_db_list = db.list_collection_names().await;
     if mongo_db_list.is_err() {
-        println!("Error while listing collection names");
-        println!("{}", mongo_db_list.as_ref().err().unwrap().to_string());
-        return Err(Error::new(
-            ErrorKind::Other,
-            mongo_db_list.err().unwrap().to_string(),
-        ));
-    };
+        eprintln!("Error while listing collection names");
+        let err_msg = mongo_db_list.as_ref().err().unwrap().to_string();
+        eprintln!("{}", err_msg);
+        return Err(Error::new(ErrorKind::Other, err_msg));
+    }
     for collection_name in mongo_db_list.unwrap() {
         println!("Collection name: {}", collection_name);
     }
-
     //postgres initialization
     println!("===postgres initialization===");
-    let mut postgres_client = match utility::connect_to_postgres().await {
-        Ok(client) => client,
+    let psql_client = match pool.get().await {
+        Ok(conn) => conn,
         Err(e) => {
+            eprintln!("Failed to get connection from pool: {}", e);
             return Err(Error::new(ErrorKind::Other, e.to_string()));
         }
     };
-    match postgres_client.batch_execute(POSTGRES_SQL) {
+    //create tables
+    match psql_client.batch_execute(POSTGRES_SQL).await {
         Ok(_) => println!("Postgres tables initialized successfully"),
         Err(e) => {
-            println!("Error while initializing Postgres tables");
-            println!("{}", e.to_string());
+            eprintln!("Error while initializing Postgres tables");
+            eprintln!("{}", e.to_string());
             return Err(Error::new(ErrorKind::Other, e.to_string()));
         }
     }

@@ -8,8 +8,9 @@ actix-cors = "0.7.1"
 actix-files = "0.6.8"
 actix-multipart = "0.7.2"
 actix-web = "4.12.1"
+deadpool-postgres = "0.14.1"
 mongodb = "3.4.1"
-postgres = "0.19.12"
+tokio-postgres = "0.7.15"
 [dependencies.tokio]
 version = "1.34.0"
 features = [
