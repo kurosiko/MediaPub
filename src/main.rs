@@ -56,7 +56,7 @@ async fn main() -> Result<(), Error> {
                     .total_limit(MAX_PAYLOAD_SIZE)
                     .memory_limit(MAX_PAYLOAD_SIZE),
             )
-            .wrap(Cors::default().allow_any_origin().allow_any_method())
+            .wrap(Cors::default().allow_any_origin().allow_any_method().allow_any_header())
             .app_data(web::Data::new(pool.clone()))
             .service(web::resource("/ping").route(web::get().to(ping)))
             .service(
