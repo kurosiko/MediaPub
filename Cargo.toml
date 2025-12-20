@@ -12,7 +12,12 @@ bcrypt = "0.17.1"
 deadpool-postgres = "0.14.1"
 dotenvy = "0.15.7"
 mongodb = "3.4.1"
-tokio-postgres = "0.7.15"
+[dependencies.tokio-postgres]
+version = "0.7.15"
+features = [
+    "with-uuid-1",
+    "with-chrono-0_4"
+]
 [dependencies.tokio]
 version = "1.34.0"
 features = [

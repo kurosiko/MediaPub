@@ -45,8 +45,7 @@ use crate::errors::{
 };
 
 fn extract_user_id_from_row(row: &tokio_postgres::Row) -> Result<Uuid, ErrorKind> {
-    let user_id_bytes: Vec<u8> = row.get(0);
-    match Uuid::from_slice(&user_id_bytes) {
+    match row.try_get::<_, Uuid>(0) {
         Ok(uuid) => Ok(uuid),
         Err(e) => {
             eprintln!("Invalid user_id format: {}", e);
@@ -92,7 +91,10 @@ pub async fn check_user_validity_with_pool(
                 )
                 .await
             {
-                Ok(row) => extract_user_id_from_row(&row),
+                Ok(row) => {
+                    let user_id: Uuid = row.get(0);
+                    Ok(user_id)
+                }
                 Err(e) => {
                     eprintln!("Session token query failed: {}", e);
                     Err(DatabaseError(QueryFailed(Postgres)))
@@ -107,7 +109,7 @@ pub async fn check_user_validity_with_pool(
     match psql_client
         .query_one(
             "SELECT is_active FROM \"user\" WHERE user_id = $1 AND is_active = true",
-            &[&user_id.to_string()],
+            &[&user_id],
         )
         .await
     {

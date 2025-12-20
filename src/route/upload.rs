@@ -123,13 +123,7 @@ pub async fn upload(
                 }));
             }
         }
-        if let Err(e) = postgres
-            .execute(
-                &statement,
-                &[&post_id.as_bytes().to_vec(), &user_id.as_bytes().to_vec()],
-            )
-            .await
-        {
+        if let Err(e) = postgres.execute(&statement, &[&post_id, &user_id]).await {
             eprintln!("PostgreSQL Insert Error: {}", e);
             return Ok(HttpResponse::InternalServerError().json(ErrorResponse {
                 error: "Failed to store post metadata in database.".to_string(),
