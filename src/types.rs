@@ -12,6 +12,8 @@ pub struct Post {
     pub uploader: Uuid,
 }
 
+
+
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct ResponseFile {
     pub file: Vec<String>,
@@ -76,4 +78,10 @@ pub struct SessionTokenResponse {
 #[derive(Debug, Serialize)]
 pub struct ErrorResponse {
     pub error: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ItemResponse {
+    pub image: String,
+    pub metadata: UploadJson,
 }

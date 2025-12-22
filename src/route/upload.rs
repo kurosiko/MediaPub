@@ -1,9 +1,7 @@
 use crate::{
-    DESTINATION,
-    types::{ErrorResponse, Post, ResponseFile, UploadFrom},
-    utility::{
-        self, CredentialType, check_user_validity_with_pool, generate_response, get_psql_pool,
-    },
+    DESTINATION, MONGODB_DBANAME, types::{ErrorResponse, Post, ResponseFile, UploadFrom}, utility::{
+        CredentialType, check_user_validity_with_pool, generate_response, get_psql_pool,
+    }
 };
 use actix_multipart::form::MultipartForm;
 use actix_web::{
@@ -12,13 +10,15 @@ use actix_web::{
     web,
 };
 use deadpool_postgres::Pool;
+use mongodb::{Client, bson};
 use std::io;
 use uuid::Uuid;
 
 pub async fn upload(
     MultipartForm(form): MultipartForm<UploadFrom>,
     request: HttpRequest,
-    pool: web::Data<Pool>,
+    psql_pool: web::Data<Pool>,
+    mongo_pool:web::Data<Client>
 ) -> io::Result<impl Responder> {
     if form.file.len() != form.metadata.len() {
         return Ok(HttpResponse::BadRequest().json(ErrorResponse {
@@ -40,21 +40,13 @@ pub async fn upload(
         }
     };
     let user_id =
-        match check_user_validity_with_pool(&pool, auth_header, CredentialType::SessionToken).await
+        match check_user_validity_with_pool(&psql_pool, auth_header, CredentialType::SessionToken).await
         {
             Ok(id) => id,
             Err(e) => return Ok(generate_response(&e)),
         };
-    let mongo = match utility::connect_to_mongo().await {
-        Ok(client) => client,
-        Err(_) => {
-            return Ok(HttpResponse::ExpectationFailed().json(ErrorResponse {
-                error: "Failed to connect to MongoDB".to_string(),
-            }));
-        }
-    };
-    let coll = mongo.database("image").collection::<Post>("post");
-    let postgres = match get_psql_pool(&pool).await {
+    let coll = mongo_pool.database(MONGODB_DBANAME).collection::<Post>("post");
+    let postgres = match get_psql_pool(&psql_pool).await {
         Ok(conn) => conn,
         Err(_) => {
             return Ok(HttpResponse::ExpectationFailed().json(ErrorResponse {
@@ -65,7 +57,9 @@ pub async fn upload(
     println!("database connection established");
 
     let statement = match postgres
-        .prepare("INSERT INTO post (post_id, user_id) VALUES ($1, $2)")
+        .prepare(
+            "INSERT INTO post (post_id, user_id, filename, content_type) VALUES ($1, $2, $3, $4)"
+        )
         .await
     {
         Ok(stmt) => stmt,
@@ -80,16 +74,17 @@ pub async fn upload(
     //file process
     let mut received_files: Vec<String> = Vec::new();
     for (file, metadata) in form.file.into_iter().zip(form.metadata.0.into_iter()) {
-        match &file.content_type {
+        let content_type = match &file.content_type {
             Some(ct_type) => {
                 println!("Content-Type: {}", ct_type.essence_str());
+                ct_type.essence_str().to_string()
             }
             None => {
                 return Ok(HttpResponse::BadRequest().json(ErrorResponse {
                     error: "Content-Type header missing.".to_string(),
                 }));
             }
-        }
+        };
 
         let filename = match &file.file_name {
             Some(name) => name.clone(),
@@ -123,7 +118,12 @@ pub async fn upload(
                 }));
             }
         }
-        if let Err(e) = postgres.execute(&statement, &[&post_id, &user_id]).await {
+        if let Err(e) = postgres.execute(
+            &statement,
+            &[&post_id, &user_id, &new_filename, &content_type]
+        )
+        .await
+        {
             eprintln!("PostgreSQL Insert Error: {}", e);
             return Ok(HttpResponse::InternalServerError().json(ErrorResponse {
                 error: "Failed to store post metadata in database.".to_string(),

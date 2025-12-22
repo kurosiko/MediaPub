@@ -1,22 +1,9 @@
-use crate::MONGODB_URI;
 use crate::types::ErrorResponse;
 use actix_web::HttpResponse;
 use deadpool_postgres::{Object, Pool};
 use serde::Deserialize;
 use uuid::Uuid;
 
-pub async fn connect_to_mongo() -> std::io::Result<mongodb::Client> {
-    match mongodb::Client::with_uri_str(MONGODB_URI).await {
-        Ok(client) => Ok(client),
-        Err(e) => {
-            eprintln!("Failed to connect to MongoDB: {}", e);
-            Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                e.to_string(),
-            ))
-        }
-    }
-}
 
 pub async fn get_psql_pool(pool: &Pool) -> std::io::Result<Object> {
     match pool.get().await {

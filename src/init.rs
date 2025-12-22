@@ -1,5 +1,5 @@
-use crate::utility;
 use deadpool_postgres::Pool;
+use mongodb::Client;
 use std::io::{Error, ErrorKind, Result};
 
 const POSTGRES_SQL: &str = "
@@ -48,6 +48,8 @@ CREATE TABLE IF NOT EXISTS \"dev_token\" (
 CREATE TABLE IF NOT EXISTS \"post\" (
     post_id UUID PRIMARY KEY NOT NULL,
     user_id UUID NOT NULL REFERENCES \"user\"(user_id) ON DELETE CASCADE,
+    filename TEXT NOT NULL,
+    content_type TEXT NOT NULL,
     is_tagged BOOLEAN NOT NULL DEFAULT false,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -64,30 +66,12 @@ CREATE INDEX IF NOT EXISTS idx_post_created_at ON \"post\"(created_at DESC);
 ";
 
 /// Initialize database tables and collections
-pub async fn database(pool: &Pool) -> Result<()> {
+pub async fn database(psql_pool: &Pool,mongo_pool: &Client) -> Result<()> {
     //mongo initialization
-    print!("===mongo initialization===");
-    let mongo_client = match utility::connect_to_mongo().await {
-        Ok(client) => client,
-        Err(e) => {
-            eprintln!("MongoDB connection failed: {}", e);
-            return Err(e);
-        }
-    };
-    let db = mongo_client.database("image");
-    let mongo_db_list = db.list_collection_names().await;
-    if mongo_db_list.is_err() {
-        eprintln!("Error while listing collection names");
-        let err_msg = mongo_db_list.as_ref().err().unwrap().to_string();
-        eprintln!("{}", err_msg);
-        return Err(Error::new(ErrorKind::Other, err_msg));
-    }
-    for collection_name in mongo_db_list.unwrap() {
-        println!("Collection name: {}", collection_name);
-    }
+    println!("===mongo initialization===");
     //postgres initialization
     println!("===postgres initialization===");
-    let psql_client = match pool.get().await {
+    let psql_client = match psql_pool.get().await {
         Ok(conn) => conn,
         Err(e) => {
             eprintln!("Failed to get connection from pool: {}", e);
